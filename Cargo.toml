@@ -1,0 +1,10 @@
+[package]
+name = "luals-gen"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+luals-gen-derive = { path = "./luals-gen-derive" }
+
+[workspace]
+members = [".", "example", "luals-gen-derive"]
