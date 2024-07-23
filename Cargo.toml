@@ -7,4 +7,8 @@ edition = "2021"
 luals-gen-derive = { path = "./luals-gen-derive" }
 
 [workspace]
-members = [".", "example", "luals-gen-derive"]
+members = [".", "luals-gen-derive"]
+
+[dev-dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
