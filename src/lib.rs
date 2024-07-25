@@ -3,6 +3,7 @@ use std::{
     collections::{HashMap, HashSet},
     fmt::Display,
     io::Write,
+    path::{Path, PathBuf},
     rc::Rc,
     sync::Arc,
 };
@@ -106,7 +107,7 @@ macro_rules! impl_ls_type {
 }
 
 impl_ls_type!("boolean" bool);
-impl_ls_type!("string" String,std::ffi::CString,&str,&std::ffi::CStr);
+impl_ls_type!("string" String,std::ffi::CString,&str,&std::ffi::CStr, Path, PathBuf);
 impl_ls_type!("number" f32,f64);
 impl_ls_type!("integer" i8,u8,u16,i16,u32,i32,u64,i64,u128,i128,isize,usize);
 
@@ -117,10 +118,9 @@ where
     fn lua_ls_type() -> LuaLsType {
         match T::lua_ls_type() {
             LuaLsType::Primitive(p) => LuaLsType::Primitive((p.into_owned() + "[]").into()),
-            LuaLsType::Named(n, _) => LuaLsType::Named(
-                (n + "[]").into(),
-                LuaLsTypeDef::Array(Box::new(T::lua_ls_type())),
-            ),
+            LuaLsType::Named(n, _) => {
+                LuaLsType::Named(n + "[]", LuaLsTypeDef::Array(Box::new(T::lua_ls_type())))
+            }
         }
     }
 }
@@ -132,10 +132,9 @@ where
     fn lua_ls_type() -> LuaLsType {
         match T::lua_ls_type() {
             LuaLsType::Primitive(p) => LuaLsType::Primitive((p.into_owned() + "[]").into()),
-            LuaLsType::Named(n, _) => LuaLsType::Named(
-                (n + "[]").into(),
-                LuaLsTypeDef::Array(Box::new(T::lua_ls_type())),
-            ),
+            LuaLsType::Named(n, _) => {
+                LuaLsType::Named(n + "[]", LuaLsTypeDef::Array(Box::new(T::lua_ls_type())))
+            }
         }
     }
 }
@@ -147,14 +146,14 @@ where
     fn lua_ls_type() -> LuaLsType {
         match T::lua_ls_type() {
             LuaLsType::Primitive(p) => LuaLsType::Named(
-                (p.to_owned() + "_optional").into(),
+                p.clone() + "_optional",
                 LuaLsTypeDef::Union(vec![
                     LuaLsType::Primitive(p),
                     LuaLsType::Primitive("nil".into()),
                 ]),
             ),
-            LuaLsType::Named(n, d) => LuaLsType::Named(
-                (n + "_optional").into(),
+            LuaLsType::Named(n, _) => LuaLsType::Named(
+                n + "_optional",
                 LuaLsTypeDef::Union(vec![T::lua_ls_type(), LuaLsType::Primitive("nil".into())]),
             ),
         }
@@ -168,13 +167,13 @@ where
 {
     fn lua_ls_type() -> LuaLsType {
         let key = match K::lua_ls_type() {
-            LuaLsType::Primitive(p) => (p.to_owned(), LuaLsTypeDef::Named(p)),
-            LuaLsType::Named(n, d) => (n.to_owned(), d),
+            LuaLsType::Primitive(p) => (p.clone(), LuaLsTypeDef::Named(p)),
+            LuaLsType::Named(n, d) => (n.clone(), d),
         };
 
         let val = match V::lua_ls_type() {
-            LuaLsType::Primitive(p) => (p.to_owned(), LuaLsTypeDef::Named(p)),
-            LuaLsType::Named(n, d) => (n.to_owned(), d),
+            LuaLsType::Primitive(p) => (p.clone(), LuaLsTypeDef::Named(p)),
+            LuaLsType::Named(n, d) => (n.clone(), d),
         };
 
         LuaLsType::Named(
@@ -193,12 +192,12 @@ where
 {
     fn lua_ls_type() -> LuaLsType {
         let val = match T::lua_ls_type() {
-            LuaLsType::Primitive(p) => (p.to_owned(), LuaLsTypeDef::Named(p)),
-            LuaLsType::Named(n, d) => (n.to_owned(), d),
+            LuaLsType::Primitive(p) => (p.clone(), LuaLsTypeDef::Named(p)),
+            LuaLsType::Named(n, d) => (n.clone(), d),
         };
 
         LuaLsType::Named(
-            format!("{}_arr{}", val.0.to_owned(), N).into(),
+            format!("{}_arr{}", val.0.clone(), N).into(),
             LuaLsTypeDef::TableLiteral(
                 (1..=N)
                     .map(|i| (format!("[{i}]").into(), T::lua_ls_type()))
@@ -276,7 +275,7 @@ impl Display for LuaLsTypeDef {
 impl Display for LuaLsType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            LuaLsType::Primitive(n) => f.write_str(&n),
+            LuaLsType::Primitive(n) => f.write_str(n),
             LuaLsType::Named(_, d) => f.write_fmt(format_args!("{d}")),
         }
     }

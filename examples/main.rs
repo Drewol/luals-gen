@@ -1,4 +1,4 @@
-use std::default;
+use std::path::PathBuf;
 
 use luals_gen::{LuaLsGen, ToLuaLsType};
 use serde::Serialize;
@@ -35,6 +35,7 @@ struct Foo {
     data_vec: Vec<u8>,
     #[serde(rename = "AABBcc")]
     option_a: Option<Bar>,
+    path: PathBuf,
 }
 
 #[derive(ToLuaLsType, Default, Serialize)]

@@ -191,7 +191,7 @@ fn get_enum_attrs<'a>(
     }
 }
 
-const CASES: [(&'static str, convert_case::Case); 8] = [
+const CASES: [(&str, convert_case::Case); 8] = [
     ("lowercase", convert_case::Case::Lower),
     ("UPPERCASE", convert_case::Case::Upper),
     ("PascalCase", convert_case::Case::Pascal),
