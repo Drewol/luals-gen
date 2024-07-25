@@ -58,17 +58,13 @@ pub fn to_lua_ls_type(input: TokenStream) -> TokenStream {
 
                 let variant = match &tag_content {
                     Some((None, None)) => {
-                        if x.fields.is_empty() {
-                            raw_type
-                        } else {
-                            let key_id = format_ident!("{}_key", id);
-                            let value_id = format_ident!("{}_value", id);
+                        let key_id = format_ident!("{}_{}_key", enum_id, id);
+                        let value_id = format_ident!("{}_{}_value", enum_id, id);
 
-                            quote! {
-                                luals_gen::LuaLsTypeDef::Table {
-                                    key: luals_gen::LuaLsType::Named(stringify!(#key_id).into(), #id_tokens),
-                                    value: luals_gen::LuaLsType::Named(stringify!(#value_id).into(), #raw_type)
-                                }
+                        quote! {
+                            luals_gen::LuaLsTypeDef::Table {
+                                key: std::boxed::Box::new(luals_gen::LuaLsType::Named(stringify!(#key_id).into(), #id_tokens)),
+                                value: std::boxed::Box::new(luals_gen::LuaLsType::Named(stringify!(#value_id).into(), #raw_type))
                             }
                         }
                     }

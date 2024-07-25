@@ -4,7 +4,6 @@ use luals_gen::{LuaLsGen, ToLuaLsType};
 use serde::Serialize;
 
 #[derive(ToLuaLsType, Serialize, Default)]
-#[serde(tag = "t")]
 enum Options {
     #[default]
     Yes,
