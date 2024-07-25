@@ -1,0 +1,9 @@
+[package]
+name = "luals-gen-tealr"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tealr = { git = "https://github.com/Drewol/tealr.git", features = [
+    "mlua",
+], branch = "nil-option" }
