@@ -12,6 +12,10 @@ pub use luals_gen_derive::ToLuaLsType;
 
 #[derive(Debug, Clone)]
 pub enum LuaLsTypeDef {
+    Func {
+        args: Vec<(Cow<'static, str>, LuaLsType)>,
+        output: Option<Box<LuaLsType>>,
+    },
     Named(Cow<'static, str>),
     Union(Vec<LuaLsType>),
     Array(Box<LuaLsType>),
@@ -26,12 +30,18 @@ pub enum LuaLsTypeDef {
 pub enum LuaLsType {
     Primitive(Cow<'static, str>),
     Named(Cow<'static, str>, LuaLsTypeDef),
+    Class {
+        name: Cow<'static, str>,
+        fields: Vec<(Cow<'static, str>, LuaLsType)>,
+    },
 }
 
 impl LuaLsType {
     pub fn name(&self) -> Cow<'static, str> {
         match self {
-            LuaLsType::Primitive(n) | LuaLsType::Named(n, _) => n.clone(),
+            LuaLsType::Primitive(n) | LuaLsType::Named(n, _) | LuaLsType::Class { name: n, .. } => {
+                n.clone()
+            }
         }
     }
 
@@ -60,6 +70,29 @@ impl LuaLsType {
                             ele.1.traverse_named(types, seen)
                         }
                     }
+
+                    LuaLsTypeDef::Func { args, output } => {
+                        for ele in args {
+                            ele.1.traverse_named(types, seen);
+                        }
+                        if let Some(r) = output {
+                            r.traverse_named(types, seen);
+                        }
+                    }
+                }
+            }
+            LuaLsType::Class { fields, name } => {
+                if !seen.insert(name.clone().into_owned()) {
+                    return;
+                }
+
+                types.push(LuaLsType::Class {
+                    name: name.clone(),
+                    fields: fields.clone(),
+                });
+
+                for ele in fields {
+                    ele.1.traverse_named(types, seen);
                 }
             }
         }
@@ -90,6 +123,7 @@ impl LuaLsTypeDef {
 
 pub trait ToLuaLsType {
     fn lua_ls_type() -> LuaLsType;
+    fn lua_ls_type_name() -> Cow<'static, str>;
 }
 
 macro_rules! impl_ls_type {
@@ -97,6 +131,10 @@ macro_rules! impl_ls_type {
         impl ToLuaLsType for $current_type {
             fn lua_ls_type() -> LuaLsType {
                 LuaLsType::Primitive($ls_type.into())
+            }
+
+            fn lua_ls_type_name() -> Cow<'static, str> {
+                $ls_type.into()
             }
         }
     };
@@ -118,9 +156,17 @@ where
     fn lua_ls_type() -> LuaLsType {
         match T::lua_ls_type() {
             LuaLsType::Primitive(p) => LuaLsType::Primitive((p.into_owned() + "[]").into()),
-            LuaLsType::Named(n, _) => {
+            LuaLsType::Named(n, _) | LuaLsType::Class { name: n, .. } => {
                 LuaLsType::Named(n + "[]", LuaLsTypeDef::Array(Box::new(T::lua_ls_type())))
             }
+        }
+    }
+
+    fn lua_ls_type_name() -> Cow<'static, str> {
+        if let LuaLsType::Named(n, _) | LuaLsType::Primitive(n) = T::lua_ls_type() {
+            n
+        } else {
+            unreachable!()
         }
     }
 }
@@ -132,9 +178,17 @@ where
     fn lua_ls_type() -> LuaLsType {
         match T::lua_ls_type() {
             LuaLsType::Primitive(p) => LuaLsType::Primitive((p.into_owned() + "[]").into()),
-            LuaLsType::Named(n, _) => {
+            LuaLsType::Named(n, _) | LuaLsType::Class { name: n, .. } => {
                 LuaLsType::Named(n + "[]", LuaLsTypeDef::Array(Box::new(T::lua_ls_type())))
             }
+        }
+    }
+
+    fn lua_ls_type_name() -> Cow<'static, str> {
+        if let LuaLsType::Named(n, _) | LuaLsType::Primitive(n) = T::lua_ls_type() {
+            n
+        } else {
+            unreachable!()
         }
     }
 }
@@ -152,11 +206,19 @@ where
                     LuaLsType::Primitive("nil".into()),
                 ]),
             ),
-            LuaLsType::Named(n, _) => LuaLsType::Named(
+            LuaLsType::Named(n, _) | LuaLsType::Class { name: n, .. } => LuaLsType::Named(
                 n + "_optional",
                 LuaLsTypeDef::Union(vec![T::lua_ls_type(), LuaLsType::Primitive("nil".into())]),
             ),
         }
+    }
+
+    fn lua_ls_type_name() -> Cow<'static, str> {
+        let LuaLsType::Named(n, _) = T::lua_ls_type() else {
+            unreachable!()
+        };
+
+        n
     }
 }
 
@@ -167,12 +229,16 @@ where
 {
     fn lua_ls_type() -> LuaLsType {
         let key = match K::lua_ls_type() {
-            LuaLsType::Primitive(p) => (p.clone(), LuaLsTypeDef::Named(p)),
+            LuaLsType::Primitive(p) | LuaLsType::Class { name: p, .. } => {
+                (p.clone(), LuaLsTypeDef::Named(p))
+            }
             LuaLsType::Named(n, d) => (n.clone(), d),
         };
 
         let val = match V::lua_ls_type() {
-            LuaLsType::Primitive(p) => (p.clone(), LuaLsTypeDef::Named(p)),
+            LuaLsType::Primitive(p) | LuaLsType::Class { name: p, .. } => {
+                (p.clone(), LuaLsTypeDef::Named(p))
+            }
             LuaLsType::Named(n, d) => (n.clone(), d),
         };
 
@@ -184,6 +250,14 @@ where
             },
         )
     }
+
+    fn lua_ls_type_name() -> Cow<'static, str> {
+        let LuaLsType::Named(n, _) = HashMap::<K, V>::lua_ls_type() else {
+            unreachable!()
+        };
+
+        n
+    }
 }
 
 impl<T, const N: usize> ToLuaLsType for [T; N]
@@ -192,7 +266,9 @@ where
 {
     fn lua_ls_type() -> LuaLsType {
         let val = match T::lua_ls_type() {
-            LuaLsType::Primitive(p) => (p.clone(), LuaLsTypeDef::Named(p)),
+            LuaLsType::Primitive(p) | LuaLsType::Class { name: p, .. } => {
+                (p.clone(), LuaLsTypeDef::Named(p))
+            }
             LuaLsType::Named(n, d) => (n.clone(), d),
         };
 
@@ -205,6 +281,14 @@ where
             ),
         )
     }
+
+    fn lua_ls_type_name() -> Cow<'static, str> {
+        let LuaLsType::Named(n, _) = T::lua_ls_type() else {
+            unreachable!()
+        };
+
+        n
+    }
 }
 
 impl<T> ToLuaLsType for Box<T>
@@ -213,6 +297,10 @@ where
 {
     fn lua_ls_type() -> LuaLsType {
         T::lua_ls_type()
+    }
+
+    fn lua_ls_type_name() -> Cow<'static, str> {
+        T::lua_ls_type_name()
     }
 }
 
@@ -223,6 +311,10 @@ where
     fn lua_ls_type() -> LuaLsType {
         T::lua_ls_type()
     }
+
+    fn lua_ls_type_name() -> Cow<'static, str> {
+        T::lua_ls_type_name()
+    }
 }
 
 impl<T> ToLuaLsType for Rc<T>
@@ -231,6 +323,10 @@ where
 {
     fn lua_ls_type() -> LuaLsType {
         T::lua_ls_type()
+    }
+
+    fn lua_ls_type_name() -> Cow<'static, str> {
+        T::lua_ls_type_name()
     }
 }
 
@@ -266,6 +362,21 @@ impl Display for LuaLsTypeDef {
                 }
                 f.write_str(" }")?;
             }
+
+            LuaLsTypeDef::Func { args, output } => {
+                //fun(name: string, value: any): boolean
+                let args = args
+                    .iter()
+                    .map(|x| format!("{}: {}", x.0, x.1.name()))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                let out = if let Some(out) = output {
+                    format!(":{}", out.name())
+                } else {
+                    String::new()
+                };
+                f.write_fmt(format_args!("fun({args}){out}"))?;
+            }
         }
 
         Ok(())
@@ -275,7 +386,7 @@ impl Display for LuaLsTypeDef {
 impl Display for LuaLsType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            LuaLsType::Primitive(n) => f.write_str(n),
+            LuaLsType::Primitive(n) | LuaLsType::Class { name: n, .. } => f.write_str(n),
             LuaLsType::Named(_, d) => f.write_fmt(format_args!("{d}")),
         }
     }
@@ -288,6 +399,12 @@ impl LuaLsGen {
 
         t.traverse_named(&mut types, &mut HashSet::new());
 
+        types.sort_by_key(|x| match x {
+            LuaLsType::Primitive(_) => 1,
+            LuaLsType::Named(_, _) => 2,
+            LuaLsType::Class { .. } => 0,
+        });
+
         for t in types.iter().rev() {
             let t_fmt = format!("{t}");
             match t {
@@ -298,6 +415,13 @@ impl LuaLsGen {
                     }
 
                     writeln!(w, "---@alias {n} {t_fmt}")?;
+                }
+                LuaLsType::Class { name, fields } => {
+                    writeln!(w, "---@class {name}")?;
+                    for (name, t) in fields {
+                        let t_name = t.name();
+                        writeln!(w, "---@field {name} {t_name}")?;
+                    }
                 }
             }
         }

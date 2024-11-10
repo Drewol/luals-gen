@@ -106,10 +106,15 @@ pub fn to_lua_ls_type(input: TokenStream) -> TokenStream {
     };
 
     let expanded = quote! {
+
         impl luals_gen::ToLuaLsType for #id {
             fn lua_ls_type() -> luals_gen::LuaLsType {
                 luals_gen::LuaLsType::Named(stringify!(#id).into(),
                 #expanded)
+            }
+
+            fn lua_ls_type_name() -> std::borrow::Cow<'static, str> {
+                stringify!(#id).into()
             }
         }
     };
